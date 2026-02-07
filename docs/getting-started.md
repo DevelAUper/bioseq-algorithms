@@ -19,3 +19,12 @@ This creates `mvnw`, `mvnw.cmd`, and the `.mvn/wrapper/` files needed to run:
 cd java
 .\mvnw.cmd -q test
 ```
+
+## Running the tools
+Java 21 is required for this project. Use the Maven Wrapper in `java/` to build:
+```powershell
+cd java
+.\mvnw.cmd -q test
+.\mvnw.cmd -q package
+```
+Runnable jars will be produced later in the `cli` module. For the current CLI contract and options, see `docs/cli.md`.
