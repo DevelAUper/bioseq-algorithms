@@ -1,0 +1,23 @@
+# Maven
+target/
+**/target/
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+*.class
+*.jar
+*.war
+*.ear
