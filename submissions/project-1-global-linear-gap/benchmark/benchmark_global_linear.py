@@ -18,10 +18,12 @@ DNA = "ACGT"
 
 
 def random_dna(length: int) -> str:
+    # Random DNA for synthetic benchmark inputs.
     return "".join(random.choice(DNA) for _ in range(length))
 
 
 def run_global_linear(work_dir: Path, jar_rel: str, matrix_path: Path, seq1: str, seq2: str, label: str) -> float:
+    # Call the same CLI command used by the submission scripts.
     cmd = [
         "java",
         "-jar",
@@ -40,6 +42,7 @@ def run_global_linear(work_dir: Path, jar_rel: str, matrix_path: Path, seq1: str
     result = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True)
     elapsed = time.perf_counter() - start
     if result.returncode != 0:
+        # Print stderr to keep failures actionable for tutors/students.
         print(f"Command failed for {label}:", file=sys.stderr)
         print(result.stderr.strip(), file=sys.stderr)
         raise SystemExit(result.returncode)
@@ -57,6 +60,7 @@ def main() -> None:
     png_path = (script_dir / "../results/timings_project1_plot.png").resolve()
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Warmup runs reduce JVM/JIT first-run noise in measured points.
     warm_seq1 = random_dna(WARMUP_LENGTH)
     warm_seq2 = random_dna(WARMUP_LENGTH)
     for run_idx in range(WARMUP_RUNS):
@@ -73,6 +77,7 @@ def main() -> None:
     for length in LENGTHS:
         seq1 = random_dna(length)
         seq2 = random_dna(length)
+        # Repeat and summarize with median + min for robust reporting.
         runtimes = [
             run_global_linear(
                 work_dir,
@@ -97,6 +102,7 @@ def main() -> None:
     try:
         import matplotlib.pyplot as plt
 
+        # Plot runtime against DP work size (n*m cells).
         x = [row[1] for row in rows]
         y = [row[2] for row in rows]
         plt.figure(figsize=(7, 4))
@@ -109,6 +115,7 @@ def main() -> None:
         plt.savefig(png_path, dpi=150)
         plt.close()
     except ImportError:
+        # CSV remains the primary artifact; plotting is optional.
         print("Matplotlib not installed. CSV was generated. You can plot manually.")
 
     print("Benchmark complete.")

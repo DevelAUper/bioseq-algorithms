@@ -10,6 +10,7 @@ set "SRC_PRIMARY=..\..\..\..\java\cli\target\bioseq-cli.jar"
 set "SRC_FALLBACK=..\..\..\java\cli\target\bioseq-cli.jar"
 set "DST=bioseq-cli.jar"
 
+REM Preferred path from repository root layout.
 if exist "%SRC_PRIMARY%" (
   copy /Y "%SRC_PRIMARY%" "%DST%" >nul
   echo Success: copied "%SRC_PRIMARY%" to "%DST%".
@@ -17,6 +18,7 @@ if exist "%SRC_PRIMARY%" (
   exit /b 0
 )
 
+REM Fallback path in case folder depth differs.
 if exist "%SRC_FALLBACK%" (
   copy /Y "%SRC_FALLBACK%" "%DST%" >nul
   echo Success: copied "%SRC_FALLBACK%" to "%DST%".

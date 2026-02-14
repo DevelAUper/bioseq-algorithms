@@ -11,17 +11,20 @@ JAR="./bioseq-cli.jar"
 OUT_DIR="./output"
 OUT_FILE="$OUT_DIR/global_count_example.txt"
 
+# Guard: Java must be on PATH.
 if ! command -v java >/dev/null 2>&1; then
   echo "Java is not installed or not on PATH."
   echo "Install Java and try again."
   exit 1
 fi
 
+# Guard: expected jar must exist in run/ folder.
 if [ ! -f "$JAR" ]; then
   echo "Jar not found. Run ./copy_jar_here.sh or build the project."
   exit 1
 fi
 
+# Ensure output folder exists before writing result file.
 mkdir -p "$OUT_DIR"
 
 java -jar "$JAR" global_count \

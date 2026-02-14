@@ -10,6 +10,7 @@ DNA = "ACGT"
 
 
 def random_dna(length: int) -> str:
+    # Uniform random DNA generator used for quick synthetic test data.
     return "".join(random.choice(DNA) for _ in range(length))
 
 
@@ -36,6 +37,7 @@ def main() -> None:
 
     out1 = Path(args.output1)
     out2 = Path(args.output2)
+    # Create parent folders automatically so users can pass new output paths.
     out1.parent.mkdir(parents=True, exist_ok=True)
     out2.parent.mkdir(parents=True, exist_ok=True)
 

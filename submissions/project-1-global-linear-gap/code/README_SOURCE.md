@@ -1,14 +1,14 @@
 # Project 1 Source Bundle
 
-This `code/` folder is a self-contained source snapshot for Project 1.
+This folder is a self-contained source snapshot used for Project 1 submission.
 
-## Module structure
-- `core`: shared data structures and utilities.
-- `pairwise-alignment`: global alignment implementations.
-- `cli`: command-line interface.
+## Modules
+- `core`: sequence model, FASTA parsing, scoring matrix parsing, alphabet validation, gap-cost utilities.
+- `pairwise-alignment`: global linear-gap alignment and optimal-alignment counting implementations.
+- `cli`: command-line entrypoints and output helpers.
 
-## How to build
-From inside `submissions/project-1-global-linear-gap/code/`:
+## Build
+Run from inside `submissions/project-1-global-linear-gap/code/`.
 
 Windows:
 ```bat
@@ -22,4 +22,4 @@ Mac/Linux:
 ./mvnw -q -pl cli -am package
 ```
 
-The runnable jar in `../run/` was built from this source.
+The runnable jar in `../run/` was built from this source tree.

@@ -1,6 +1,15 @@
 # Project 3: Multiple Alignment
 
-This folder is reserved for the multiple alignment submission package.
+This folder is reserved for the Project 3 submission package.
 
-## Notes for the instructor
-When completed, this submission will include a short report and a code snapshot in this folder.
+## Planned contents
+- `run/`: runnable scripts and example inputs.
+- `code/`: source snapshot used to build runnable artifacts.
+- `report.md`: final report.
+- evaluation answer file(s) requested by the course.
+
+## Status
+Project 3 bundle is not finalized yet.
+
+## Notes for instructor
+When complete, this folder will follow the same structure used in Project 1 for easier review.

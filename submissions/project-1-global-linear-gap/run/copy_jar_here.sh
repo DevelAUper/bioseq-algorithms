@@ -13,12 +13,14 @@ DST="./bioseq-cli.jar"
 ROOT_JAR_PRIMARY="../../../../bioseq-cli.jar"
 ROOT_JAR_FALLBACK="../../../bioseq-cli.jar"
 
+# Preferred path from repository root layout.
 if [ -f "$SRC_PRIMARY" ]; then
   cp -f "$SRC_PRIMARY" "$DST"
   echo "Success: copied $SRC_PRIMARY to $DST"
   exit 0
 fi
 
+# Fallback path in case folder depth differs.
 if [ -f "$SRC_FALLBACK" ]; then
   cp -f "$SRC_FALLBACK" "$DST"
   echo "Success: copied $SRC_FALLBACK to $DST"
