@@ -1,0 +1,5 @@
+cost: 6
+>seq1
+ACGTT-GCA
+>seq2
+AC-TTGG-A
