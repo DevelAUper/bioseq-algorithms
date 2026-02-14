@@ -1,0 +1,8 @@
+# Generated outputs
+output/*
+!output/.gitkeep
+dist/
+
+# Timing CSVs that may be generated during experiments
+*.timing.csv
+timings*.csv

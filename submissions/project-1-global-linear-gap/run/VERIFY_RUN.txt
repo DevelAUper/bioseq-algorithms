@@ -1,0 +1,26 @@
+VERIFY RUN CHECKLIST (Project 1)
+
+1) Windows quick verification
+- Open this folder.
+- Double-click copy_jar_here.bat (if bioseq-cli.jar is missing).
+- Double-click RUN_GLOBAL_LINEAR.bat.
+- Double-click RUN_GLOBAL_COUNT.bat.
+- Expected output files:
+  - output/global_linear_example.txt
+  - output/global_count_example.txt
+
+2) Mac/Linux quick verification
+- Open terminal in this folder.
+- Run:
+  chmod +x copy_jar_here.sh RUN_GLOBAL_LINEAR.sh RUN_GLOBAL_COUNT.sh
+  ./copy_jar_here.sh
+  ./RUN_GLOBAL_LINEAR.sh
+  ./RUN_GLOBAL_COUNT.sh
+- Expected output files:
+  - output/global_linear_example.txt
+  - output/global_count_example.txt
+
+3) If a script fails
+- If jar missing: run copy_jar_here script first.
+- If Java missing: install Java and rerun.
+- If .sh says permission denied: run the chmod command above.
