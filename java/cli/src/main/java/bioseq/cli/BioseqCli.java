@@ -162,6 +162,9 @@ public final class BioseqCli implements Runnable {
         System.out.println(output);
       } else {
         try {
+          if (outPath.getParent() != null) {
+            Files.createDirectories(outPath.getParent());
+          }
           Files.writeString(outPath, output + System.lineSeparator(), StandardCharsets.UTF_8);
         } catch (IOException e) {
           throw new CommandLine.ExecutionException(spec.commandLine(), "Failed to write --out file", e);
