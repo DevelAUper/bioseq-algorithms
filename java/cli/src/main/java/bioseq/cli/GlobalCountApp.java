@@ -1,7 +1,20 @@
 package bioseq.cli;
 
 /**
- * CLI entry point for counting optimal global alignments.
+ * Backward-compatible CLI entry point for counting optimal min-cost global alignments.
+ *
+ * <p>This forwards to {@code bioseq-cli global_count ...}. The command accepts either
+ * {@code --seq1/--seq2} (direct sequence strings) or {@code --fasta1/--fasta2} (first FASTA record in each
+ * file), plus {@code --matrix} and {@code --gap}.
+ *
+ * <p>The matrix is a distance/cost matrix: lower values are better, and both cost and count are computed
+ * under minimization.
+ *
+ * <p>Output:
+ * <ul>
+ *   <li>{@code cost: <int>}</li>
+ *   <li>{@code count: <BigInteger>}</li>
+ * </ul>
  */
 public final class GlobalCountApp {
   private GlobalCountApp() {
