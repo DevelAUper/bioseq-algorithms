@@ -35,11 +35,29 @@ public final class OptimalAlignmentCounter {
       return BigInteger.ONE;
     }
 
-    // TODO(Project 1 DP):
-    // 1) Fill dpCost[i][j] using the min-cost recurrence (DIAG/UP/LEFT).
-    // 2) Set dpCount[i][j] to sum of predecessor counts that achieve that minimum.
-    //    For example, if DIAG and LEFT tie for min, dpCount[i][j] = countDiag + countLeft.
-    throw new UnsupportedOperationException("TODO: implement optimal-alignment count DP recurrence");
+    for (int i = 1; i <= n; i++) {
+      for (int j = 1; j <= mLen; j++) {
+        int diag = dpCost[i - 1][j - 1] + m.cost(a.charAt(i - 1), b.charAt(j - 1));
+        int up = dpCost[i - 1][j] + gap.cost(1);
+        int left = dpCost[i][j - 1] + gap.cost(1);
+        int best = Math.min(diag, Math.min(up, left));
+
+        dpCost[i][j] = best;
+        BigInteger count = BigInteger.ZERO;
+        if (diag == best) {
+          count = count.add(dpCount[i - 1][j - 1]);
+        }
+        if (up == best) {
+          count = count.add(dpCount[i - 1][j]);
+        }
+        if (left == best) {
+          count = count.add(dpCount[i][j - 1]);
+        }
+        dpCount[i][j] = count;
+      }
+    }
+
+    return dpCount[n][mLen];
   }
 
   private static void validateInputs(Sequence s1, Sequence s2, ScoreMatrix m, LinearGapCost gap) {
