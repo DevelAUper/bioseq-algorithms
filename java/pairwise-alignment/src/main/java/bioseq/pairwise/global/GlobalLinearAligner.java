@@ -64,12 +64,26 @@ public final class GlobalLinearAligner implements GlobalAligner {
       back[0][j] = Move.LEFT;
     }
 
-    if (n > 0 && mLen > 0) {
-      // TODO(Project 1 DP): Fill interior costs and backpointers.
-      // 1) Compute candidate costs from DIAG/UP/LEFT.
-      // 2) Set dp[i][j] to the minimum candidate.
-      // 3) For ties, choose deterministic priority DIAG > UP > LEFT for `back[i][j]`.
-      throw new UnsupportedOperationException("TODO: implement DP recurrence and backpointer tie handling");
+    for (int i = 1; i <= n; i++) {
+      for (int j = 1; j <= mLen; j++) {
+        int diag = dp[i - 1][j - 1] + m.cost(a.charAt(i - 1), b.charAt(j - 1));
+        int up = dp[i - 1][j] + gap.cost(1);
+        int left = dp[i][j - 1] + gap.cost(1);
+
+        int best = diag;
+        Move bestMove = Move.DIAG;
+        if (up < best) {
+          best = up;
+          bestMove = Move.UP;
+        }
+        if (left < best) {
+          best = left;
+          bestMove = Move.LEFT;
+        }
+
+        dp[i][j] = best;
+        back[i][j] = bestMove;
+      }
     }
 
     StringBuilder aligned1 = new StringBuilder();
@@ -77,20 +91,30 @@ public final class GlobalLinearAligner implements GlobalAligner {
     int i = n;
     int j = mLen;
     while (i > 0 || j > 0) {
-      // TODO(Project 1 DP): Extend traceback using `back[i][j]` to reconstruct one optimal alignment.
-      // DIAG consumes one char from both sequences, UP consumes one from s1 and inserts '-',
-      // LEFT consumes one from s2 and inserts '-'. Append chars then reverse at the end.
-      // Boundary fallback below keeps empty-vs-nonempty cases working until full traceback is added.
-      if (i > 0 && j == 0) {
+      Move move = back[i][j];
+      if (move == Move.DIAG) {
+        aligned1.append(a.charAt(i - 1));
+        aligned2.append(b.charAt(j - 1));
+        i--;
+        j--;
+      } else if (move == Move.UP) {
         aligned1.append(a.charAt(i - 1));
         aligned2.append('-');
         i--;
-      } else if (j > 0 && i == 0) {
+      } else if (move == Move.LEFT) {
+        aligned1.append('-');
+        aligned2.append(b.charAt(j - 1));
+        j--;
+      } else if (i > 0 && j == 0) {
+        aligned1.append(a.charAt(i - 1));
+        aligned2.append('-');
+        i--;
+      } else if (j > 0) {
         aligned1.append('-');
         aligned2.append(b.charAt(j - 1));
         j--;
       } else {
-        throw new UnsupportedOperationException("TODO: implement traceback reconstruction for interior cells");
+        throw new IllegalStateException("Traceback failed at cell (" + i + "," + j + ")");
       }
     }
 

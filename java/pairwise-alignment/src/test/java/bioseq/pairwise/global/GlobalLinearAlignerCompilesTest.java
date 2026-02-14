@@ -37,4 +37,28 @@ class GlobalLinearAlignerCompilesTest {
     // Best for AC vs A is matching A-A then deleting C (cost 2), not forcing C-A mismatch.
     assertEquals(2, aligner.computeCost(Sequence.of("AC"), Sequence.of("A"), matrix, gap));
   }
+
+  @Test
+  void alignReturnsExpectedTracebackAndCost() throws IOException {
+    Path matrixFile = tempDir.resolve("tiny-matrix-align.txt");
+    Files.writeString(matrixFile, """
+        2
+        A 0 5
+        C 5 0
+        """);
+    ScoreMatrix matrix = ScoreMatrix.fromPhylipLikeFile(matrixFile);
+    GlobalLinearAligner aligner = new GlobalLinearAligner();
+
+    // AC vs A: optimal is match A-A and delete C.
+    var result1 = aligner.align(Sequence.of("AC"), Sequence.of("A"), matrix, new LinearGapCost(2));
+    assertEquals(2, result1.getCost());
+    assertEquals("AC", result1.getAligned1());
+    assertEquals("A-", result1.getAligned2());
+
+    // Here substitution is cheaper than opening two opposite gaps (5 < 3 + 3), so we expect DIAG.
+    var result2 = aligner.align(Sequence.of("A"), Sequence.of("C"), matrix, new LinearGapCost(3));
+    assertEquals(5, result2.getCost());
+    assertEquals("A", result2.getAligned1());
+    assertEquals("C", result2.getAligned2());
+  }
 }
