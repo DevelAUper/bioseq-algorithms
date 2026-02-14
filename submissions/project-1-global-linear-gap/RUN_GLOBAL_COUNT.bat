@@ -15,7 +15,7 @@ set "OUT_FILE=%OUT_DIR%\global_count_example.txt"
 
 REM Guard: jar must be present in this folder.
 if not exist "%JAR%" (
-  echo Jar not found. Run copy_jar_here.bat or build the project.
+  echo Jar not found. Build the project to create bioseq-cli.jar.
   pause
   exit /b 1
 )
