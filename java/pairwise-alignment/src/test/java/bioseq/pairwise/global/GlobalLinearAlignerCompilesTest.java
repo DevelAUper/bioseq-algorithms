@@ -16,18 +16,25 @@ class GlobalLinearAlignerCompilesTest {
   Path tempDir;
 
   @Test
-  void computeCostRunsForTrivialEmptySequences() throws IOException {
+  void computeCostReturnsExpectedMinCosts() throws IOException {
     Path matrixFile = tempDir.resolve("tiny-matrix.txt");
     Files.writeString(matrixFile, """
-        1
-        A 0
+        2
+        A 0 5
+        C 5 0
         """);
 
     ScoreMatrix matrix = ScoreMatrix.fromPhylipLikeFile(matrixFile);
     GlobalLinearAligner aligner = new GlobalLinearAligner();
     LinearGapCost gap = new LinearGapCost(2);
 
-    int cost = aligner.computeCost(Sequence.of(""), Sequence.of(""), matrix, gap);
-    assertEquals(0, cost);
+    // Match is free.
+    assertEquals(0, aligner.computeCost(Sequence.of("A"), Sequence.of("A"), matrix, gap));
+    // With linear gaps, A vs C can be realized as (A,-) + (-,C): 2 + 2 = 4, which beats mismatch cost 5.
+    assertEquals(4, aligner.computeCost(Sequence.of("A"), Sequence.of("C"), matrix, gap));
+    // Aligning against empty sequence is one deletion/insertion per residue.
+    assertEquals(2, aligner.computeCost(Sequence.of("A"), Sequence.of(""), matrix, gap));
+    // Best for AC vs A is matching A-A then deleting C (cost 2), not forcing C-A mismatch.
+    assertEquals(2, aligner.computeCost(Sequence.of("AC"), Sequence.of("A"), matrix, gap));
   }
 }

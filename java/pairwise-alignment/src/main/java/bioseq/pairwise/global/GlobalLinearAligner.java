@@ -32,13 +32,15 @@ public final class GlobalLinearAligner implements GlobalAligner {
       return dp[n][mLen];
     }
 
-    // TODO(Project 1 DP): Fill the interior recurrence.
-    // dp[i][j] = min(
-    //   dp[i - 1][j - 1] + matrix.cost(a_i, b_j),
-    //   dp[i - 1][j] + gap.cost(1),
-    //   dp[i][j - 1] + gap.cost(1)
-    // )
-    throw new UnsupportedOperationException("TODO: implement core DP recurrence for computeCost");
+    for (int i = 1; i <= n; i++) {
+      for (int j = 1; j <= mLen; j++) {
+        int diag = dp[i - 1][j - 1] + m.cost(a.charAt(i - 1), b.charAt(j - 1));
+        int up = dp[i - 1][j] + gap.cost(1);
+        int left = dp[i][j - 1] + gap.cost(1);
+        dp[i][j] = Math.min(diag, Math.min(up, left));
+      }
+    }
+    return dp[n][mLen];
   }
 
   @Override
