@@ -5,11 +5,14 @@ import bioseq.core.gap.LinearGapCost;
 import bioseq.core.io.FastaReader;
 import bioseq.core.model.Sequence;
 import bioseq.core.scoring.ScoreMatrix;
+import bioseq.pairwise.api.GlobalAligner;
 import bioseq.pairwise.global.GlobalAffineAligner;
 import bioseq.pairwise.global.GlobalLinearAligner;
 import bioseq.pairwise.global.OptimalAffineAlignmentCounter;
 import bioseq.pairwise.global.OptimalAlignmentCounter;
 import bioseq.pairwise.model.AlignmentResult;
+import bioseq.pairwise.parallel.WavefrontAffineAligner;
+import bioseq.pairwise.parallel.WavefrontLinearAligner;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -77,7 +80,13 @@ public final class BioseqCli implements Runnable {
       Inputs inputs = resolveInputs();
       ScoreMatrix matrix = ScoreMatrix.fromPhylipLikeFile(matrixPath);
       LinearGapCost gapCost = new LinearGapCost(gap);
-      GlobalLinearAligner aligner = new GlobalLinearAligner();
+      GlobalAligner<LinearGapCost> aligner;
+      if (threads > 1) {
+        System.err.println("Using wavefront parallelism with " + threads + " threads");
+        aligner = new WavefrontLinearAligner(threads);
+      } else {
+        aligner = new GlobalLinearAligner();
+      }
 
       if (!traceback) {
         int cost = aligner.computeCost(inputs.seq1, inputs.seq2, matrix, gapCost);
@@ -128,7 +137,13 @@ public final class BioseqCli implements Runnable {
       Inputs inputs = resolveInputs();
       ScoreMatrix matrix = ScoreMatrix.fromPhylipLikeFile(matrixPath);
       AffineGapCost gapCost = new AffineGapCost(alpha, beta);
-      GlobalAffineAligner aligner = new GlobalAffineAligner();
+      GlobalAligner<AffineGapCost> aligner;
+      if (threads > 1) {
+        System.err.println("Using wavefront parallelism with " + threads + " threads");
+        aligner = new WavefrontAffineAligner(threads);
+      } else {
+        aligner = new GlobalAffineAligner();
+      }
       OptimalAffineAlignmentCounter counter = new OptimalAffineAlignmentCounter();
 
       if (!traceback) {
@@ -179,7 +194,7 @@ public final class BioseqCli implements Runnable {
     @Option(names = "--out", description = "Write output to file instead of stdout.")
     Path outPath;
 
-    @Option(names = "--threads", description = "Reserved for future parallelism support.")
+    @Option(names = "--threads", description = "Worker threads for wavefront DP (positive integer).")
     int threads = 1;
 
     /**
@@ -198,6 +213,9 @@ public final class BioseqCli implements Runnable {
       // Global numeric option validation shared by both subcommands.
       if (gap < 0) {
         throw new CommandLine.ParameterException(spec.commandLine(), "--gap must be non-negative");
+      }
+      if (threads <= 0) {
+        throw new CommandLine.ParameterException(spec.commandLine(), "--threads must be positive");
       }
       if (wrap <= 0) {
         throw new CommandLine.ParameterException(spec.commandLine(), "--wrap must be positive");
@@ -290,7 +308,7 @@ public final class BioseqCli implements Runnable {
     @Option(names = "--out", description = "Write output to file instead of stdout.")
     Path outPath;
 
-    @Option(names = "--threads", description = "Reserved for future parallelism support.")
+    @Option(names = "--threads", description = "Worker threads for wavefront DP (positive integer).")
     int threads = 1;
 
     /**
@@ -311,6 +329,9 @@ public final class BioseqCli implements Runnable {
       }
       if (beta < 0) {
         throw new CommandLine.ParameterException(spec.commandLine(), "--beta must be non-negative");
+      }
+      if (threads <= 0) {
+        throw new CommandLine.ParameterException(spec.commandLine(), "--threads must be positive");
       }
       if (wrap <= 0) {
         throw new CommandLine.ParameterException(spec.commandLine(), "--wrap must be positive");

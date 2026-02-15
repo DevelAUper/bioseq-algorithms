@@ -4,6 +4,9 @@ set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
 set JAR=%ROOT_DIR%\java\cli\target\bioseq-cli.jar
 
+REM Usage example (optional): add --threads N to enable wavefront parallelism.
+REM java -jar "%JAR%" global_linear --fasta1 "<file>" --fasta2 "<file>" --matrix "<file>" --gap 2 [--threads N] [--traceback]
+
 if not exist "%JAR%" (
   echo Missing jar: %JAR%
   echo Build first with: cd java ^&^& .\mvnw.cmd -q package
