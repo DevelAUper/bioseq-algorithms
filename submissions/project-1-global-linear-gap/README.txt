@@ -1,5 +1,5 @@
 Project 1: Global Alignment with Linear Gap Cost
-Authors: <Main student name> and Eduardo
+Authors: AA and Eduardo Iglesias
 Date: 17 Feb 2026
 
 QUICK START (Windows)
