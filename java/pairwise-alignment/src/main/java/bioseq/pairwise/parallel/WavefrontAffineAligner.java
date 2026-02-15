@@ -5,12 +5,10 @@ import bioseq.core.model.Sequence;
 import bioseq.core.scoring.ScoreMatrix;
 import bioseq.pairwise.api.GlobalAligner;
 import bioseq.pairwise.model.AlignmentResult;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.ForkJoinPool;
+import java.util.stream.IntStream;
 
 /**
  * Global affine-gap aligner using anti-diagonal (wavefront) parallel dynamic programming.
@@ -27,15 +25,17 @@ import java.util.concurrent.ForkJoinPool;
  * anti-diagonal are independent and can be computed in parallel once the previous anti-diagonal
  * is complete for all layers.
  */
-public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost> {
+public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost>, AutoCloseable {
   private static final int INF = Integer.MAX_VALUE / 2;
   private static final int LAYER_D = 0;
   private static final int LAYER_I = 1;
   private static final int LAYER_S = 2;
   private static final int LAYER_UNSET = -1;
-  private static final int PARALLEL_CELL_THRESHOLD = 64;
+  private static final int PARALLEL_CELL_THRESHOLD = 512;
 
   private final int numThreads;
+  private final ForkJoinPool pool;
+  private final boolean ownsPool;
 
   /**
    * Creates a wavefront affine aligner with a fixed worker count.
@@ -48,6 +48,41 @@ public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost
       throw new IllegalArgumentException("numThreads must be positive, got: " + numThreads);
     }
     this.numThreads = numThreads;
+    if (numThreads == 1) {
+      this.pool = null;
+      this.ownsPool = false;
+      return;
+    }
+
+    int available = Runtime.getRuntime().availableProcessors();
+    if (numThreads == available) {
+      // Reuse common pool when requested parallelism matches machine capacity.
+      this.pool = ForkJoinPool.commonPool();
+      this.ownsPool = false;
+    } else {
+      // Otherwise keep one dedicated pool and reuse it across method calls.
+      this.pool = new ForkJoinPool(numThreads);
+      this.ownsPool = true;
+    }
+  }
+
+  /**
+   * Shuts down the dedicated pool when this aligner owns one.
+   *
+   * <p>No-op when running sequentially or when using the common pool.
+   */
+  public void shutdown() {
+    if (ownsPool) {
+      pool.shutdown();
+    }
+  }
+
+  /**
+   * Alias for {@link #shutdown()} to support try-with-resources usage.
+   */
+  @Override
+  public void close() {
+    shutdown();
   }
 
   @Override
@@ -78,69 +113,54 @@ public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost
       sLayer[0][j] = initialGapCost(alpha, beta, j);
     }
 
-    ForkJoinPool pool = (numThreads > 1) ? new ForkJoinPool(numThreads) : null;
-    try {
-      // Process anti-diagonals in order so all d-1 dependencies are fully materialized first.
-      for (int diagonal = 2; diagonal <= n + m; diagonal++) {
-        int iMin = Math.max(1, diagonal - m);
-        int iMax = Math.min(n, diagonal - 1);
-        if (iMin > iMax) {
-          continue;
-        }
-
-        int cellCount = iMax - iMin + 1;
-        // Parallel execution is only worthwhile on sufficiently large anti-diagonals.
-        if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
-          for (int i = iMin; i <= iMax; i++) {
-            int j = diagonal - i;
-            int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-
-            int bestDiagonalPredecessor = min3(d[i - 1][j - 1], iLayer[i - 1][j - 1], sLayer[i - 1][j - 1]);
-            d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
-
-            int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
-            int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
-            iLayer[i][j] = Math.min(openInsertion, extendInsertion);
-
-            int openSkip = safeAdd(d[i][j - 1], openAndExtend);
-            int extendSkip = safeAdd(sLayer[i][j - 1], beta);
-            sLayer[i][j] = Math.min(openSkip, extendSkip);
-          }
-        } else {
-          int chunkSize = Math.max(1, (cellCount + numThreads - 1) / numThreads);
-          final int diag = diagonal;
-          List<ForkJoinTask<?>> tasks = new ArrayList<>();
-          // Cells on the same anti-diagonal are independent because all reads target older diagonals.
-          for (int start = iMin; start <= iMax; start += chunkSize) {
-            final int chunkStart = start;
-            final int chunkEnd = Math.min(iMax, start + chunkSize - 1);
-            tasks.add(pool.submit(() -> {
-              for (int i = chunkStart; i <= chunkEnd; i++) {
-                int j = diag - i;
-                int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-
-                int bestDiagonalPredecessor = min3(d[i - 1][j - 1], iLayer[i - 1][j - 1], sLayer[i - 1][j - 1]);
-                d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
-
-                int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
-                int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
-                iLayer[i][j] = Math.min(openInsertion, extendInsertion);
-
-                int openSkip = safeAdd(d[i][j - 1], openAndExtend);
-                int extendSkip = safeAdd(sLayer[i][j - 1], beta);
-                sLayer[i][j] = Math.min(openSkip, extendSkip);
-              }
-            }));
-          }
-          for (ForkJoinTask<?> task : tasks) {
-            task.join();
-          }
-        }
+    // Process anti-diagonals in order so all d-1 dependencies are fully materialized first.
+    for (int diagonal = 2; diagonal <= n + m; diagonal++) {
+      int iMin = Math.max(1, diagonal - m);
+      int iMax = Math.min(n, diagonal - 1);
+      if (iMin > iMax) {
+        continue;
       }
-    } finally {
-      // Ensure worker threads are released.
-      if (pool != null) {
-        pool.shutdown();
+
+      int cellCount = iMax - iMin + 1;
+      // Parallel execution is only worthwhile on sufficiently large anti-diagonals.
+      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+        for (int i = iMin; i <= iMax; i++) {
+          int j = diagonal - i;
+          int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+
+          int bestDiagonalPredecessor = min3(d[i - 1][j - 1], iLayer[i - 1][j - 1], sLayer[i - 1][j - 1]);
+          d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
+
+          int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
+          int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
+          iLayer[i][j] = Math.min(openInsertion, extendInsertion);
+
+          int openSkip = safeAdd(d[i][j - 1], openAndExtend);
+          int extendSkip = safeAdd(sLayer[i][j - 1], beta);
+          sLayer[i][j] = Math.min(openSkip, extendSkip);
+        }
+      } else {
+        final int dIdx = diagonal;
+        final int start = iMin;
+        final int end = iMax;
+        // A single submitted task drives parallel per-cell work on this anti-diagonal.
+        pool.submit(() ->
+            IntStream.rangeClosed(start, end).parallel().forEach(i -> {
+              int j = dIdx - i;
+              int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+
+              int bestDiagonalPredecessor = min3(d[i - 1][j - 1], iLayer[i - 1][j - 1], sLayer[i - 1][j - 1]);
+              d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
+
+              int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
+              int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
+              iLayer[i][j] = Math.min(openInsertion, extendInsertion);
+
+              int openSkip = safeAdd(d[i][j - 1], openAndExtend);
+              int extendSkip = safeAdd(sLayer[i][j - 1], beta);
+              sLayer[i][j] = Math.min(openSkip, extendSkip);
+            })
+        ).join();
       }
     }
 
@@ -184,111 +204,97 @@ public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost
       backS[0][j] = (j == 1) ? LAYER_D : LAYER_S;
     }
 
-    ForkJoinPool pool = (numThreads > 1) ? new ForkJoinPool(numThreads) : null;
-    try {
-      // Fill each anti-diagonal after all predecessor diagonals are complete.
-      for (int diagonal = 2; diagonal <= n + m; diagonal++) {
-        int iMin = Math.max(1, diagonal - m);
-        int iMax = Math.min(n, diagonal - 1);
-        if (iMin > iMax) {
-          continue;
-        }
-
-        int cellCount = iMax - iMin + 1;
-        if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
-          for (int i = iMin; i <= iMax; i++) {
-            int j = diagonal - i;
-            int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-
-            int bestDiagonalPredecessor = d[i - 1][j - 1];
-            int bestDiagonalLayer = LAYER_D;
-            if (iLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
-              bestDiagonalPredecessor = iLayer[i - 1][j - 1];
-              bestDiagonalLayer = LAYER_I;
-            }
-            if (sLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
-              bestDiagonalPredecessor = sLayer[i - 1][j - 1];
-              bestDiagonalLayer = LAYER_S;
-            }
-            d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
-            backD[i][j] = bestDiagonalLayer;
-
-            int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
-            int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
-            if (extendInsertion < openInsertion) {
-              iLayer[i][j] = extendInsertion;
-              backI[i][j] = LAYER_I;
-            } else {
-              iLayer[i][j] = openInsertion;
-              backI[i][j] = LAYER_D;
-            }
-
-            int openSkip = safeAdd(d[i][j - 1], openAndExtend);
-            int extendSkip = safeAdd(sLayer[i][j - 1], beta);
-            if (extendSkip < openSkip) {
-              sLayer[i][j] = extendSkip;
-              backS[i][j] = LAYER_S;
-            } else {
-              sLayer[i][j] = openSkip;
-              backS[i][j] = LAYER_D;
-            }
-          }
-        } else {
-          int chunkSize = Math.max(1, (cellCount + numThreads - 1) / numThreads);
-          final int diag = diagonal;
-          List<ForkJoinTask<?>> tasks = new ArrayList<>();
-          // Every task writes one (i,j) cell across all layers and reads only older diagonals.
-          for (int start = iMin; start <= iMax; start += chunkSize) {
-            final int chunkStart = start;
-            final int chunkEnd = Math.min(iMax, start + chunkSize - 1);
-            tasks.add(pool.submit(() -> {
-              for (int i = chunkStart; i <= chunkEnd; i++) {
-                int j = diag - i;
-                int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-
-                int bestDiagonalPredecessor = d[i - 1][j - 1];
-                int bestDiagonalLayer = LAYER_D;
-                if (iLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
-                  bestDiagonalPredecessor = iLayer[i - 1][j - 1];
-                  bestDiagonalLayer = LAYER_I;
-                }
-                if (sLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
-                  bestDiagonalPredecessor = sLayer[i - 1][j - 1];
-                  bestDiagonalLayer = LAYER_S;
-                }
-                d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
-                backD[i][j] = bestDiagonalLayer;
-
-                int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
-                int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
-                if (extendInsertion < openInsertion) {
-                  iLayer[i][j] = extendInsertion;
-                  backI[i][j] = LAYER_I;
-                } else {
-                  iLayer[i][j] = openInsertion;
-                  backI[i][j] = LAYER_D;
-                }
-
-                int openSkip = safeAdd(d[i][j - 1], openAndExtend);
-                int extendSkip = safeAdd(sLayer[i][j - 1], beta);
-                if (extendSkip < openSkip) {
-                  sLayer[i][j] = extendSkip;
-                  backS[i][j] = LAYER_S;
-                } else {
-                  sLayer[i][j] = openSkip;
-                  backS[i][j] = LAYER_D;
-                }
-              }
-            }));
-          }
-          for (ForkJoinTask<?> task : tasks) {
-            task.join();
-          }
-        }
+    // Fill each anti-diagonal after all predecessor diagonals are complete.
+    for (int diagonal = 2; diagonal <= n + m; diagonal++) {
+      int iMin = Math.max(1, diagonal - m);
+      int iMax = Math.min(n, diagonal - 1);
+      if (iMin > iMax) {
+        continue;
       }
-    } finally {
-      if (pool != null) {
-        pool.shutdown();
+
+      int cellCount = iMax - iMin + 1;
+      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+        for (int i = iMin; i <= iMax; i++) {
+          int j = diagonal - i;
+          int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+
+          int bestDiagonalPredecessor = d[i - 1][j - 1];
+          int bestDiagonalLayer = LAYER_D;
+          if (iLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
+            bestDiagonalPredecessor = iLayer[i - 1][j - 1];
+            bestDiagonalLayer = LAYER_I;
+          }
+          if (sLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
+            bestDiagonalPredecessor = sLayer[i - 1][j - 1];
+            bestDiagonalLayer = LAYER_S;
+          }
+          d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
+          backD[i][j] = bestDiagonalLayer;
+
+          int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
+          int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
+          if (extendInsertion < openInsertion) {
+            iLayer[i][j] = extendInsertion;
+            backI[i][j] = LAYER_I;
+          } else {
+            iLayer[i][j] = openInsertion;
+            backI[i][j] = LAYER_D;
+          }
+
+          int openSkip = safeAdd(d[i][j - 1], openAndExtend);
+          int extendSkip = safeAdd(sLayer[i][j - 1], beta);
+          if (extendSkip < openSkip) {
+            sLayer[i][j] = extendSkip;
+            backS[i][j] = LAYER_S;
+          } else {
+            sLayer[i][j] = openSkip;
+            backS[i][j] = LAYER_D;
+          }
+        }
+      } else {
+        final int dIdx = diagonal;
+        final int start = iMin;
+        final int end = iMax;
+        // A single submitted task drives parallel per-cell work on this anti-diagonal.
+        pool.submit(() ->
+            IntStream.rangeClosed(start, end).parallel().forEach(i -> {
+              int j = dIdx - i;
+              int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+
+              int bestDiagonalPredecessor = d[i - 1][j - 1];
+              int bestDiagonalLayer = LAYER_D;
+              if (iLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
+                bestDiagonalPredecessor = iLayer[i - 1][j - 1];
+                bestDiagonalLayer = LAYER_I;
+              }
+              if (sLayer[i - 1][j - 1] < bestDiagonalPredecessor) {
+                bestDiagonalPredecessor = sLayer[i - 1][j - 1];
+                bestDiagonalLayer = LAYER_S;
+              }
+              d[i][j] = safeAdd(bestDiagonalPredecessor, substitution);
+              backD[i][j] = bestDiagonalLayer;
+
+              int openInsertion = safeAdd(d[i - 1][j], openAndExtend);
+              int extendInsertion = safeAdd(iLayer[i - 1][j], beta);
+              if (extendInsertion < openInsertion) {
+                iLayer[i][j] = extendInsertion;
+                backI[i][j] = LAYER_I;
+              } else {
+                iLayer[i][j] = openInsertion;
+                backI[i][j] = LAYER_D;
+              }
+
+              int openSkip = safeAdd(d[i][j - 1], openAndExtend);
+              int extendSkip = safeAdd(sLayer[i][j - 1], beta);
+              if (extendSkip < openSkip) {
+                sLayer[i][j] = extendSkip;
+                backS[i][j] = LAYER_S;
+              } else {
+                sLayer[i][j] = openSkip;
+                backS[i][j] = LAYER_D;
+              }
+            })
+        ).join();
       }
     }
 

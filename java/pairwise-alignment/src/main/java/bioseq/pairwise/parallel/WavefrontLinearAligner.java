@@ -6,11 +6,9 @@ import bioseq.core.scoring.ScoreMatrix;
 import bioseq.pairwise.api.GlobalAligner;
 import bioseq.pairwise.global.Move;
 import bioseq.pairwise.model.AlignmentResult;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.ForkJoinPool;
+import java.util.stream.IntStream;
 
 /**
  * Global linear-gap aligner using wavefront (anti-diagonal) parallel dynamic programming.
@@ -23,10 +21,12 @@ import java.util.concurrent.ForkJoinPool;
  * <p>This implementation processes anti-diagonals sequentially to preserve dependencies, and
  * parallelizes within each anti-diagonal when it is large enough to amortize scheduling overhead.
  */
-public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost> {
-  private static final int PARALLEL_CELL_THRESHOLD = 64;
+public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost>, AutoCloseable {
+  private static final int PARALLEL_CELL_THRESHOLD = 512;
 
   private final int numThreads;
+  private final ForkJoinPool pool;
+  private final boolean ownsPool;
 
   /**
    * Creates a wavefront aligner with a fixed worker count.
@@ -39,6 +39,41 @@ public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost
       throw new IllegalArgumentException("numThreads must be positive, got: " + numThreads);
     }
     this.numThreads = numThreads;
+    if (numThreads == 1) {
+      this.pool = null;
+      this.ownsPool = false;
+      return;
+    }
+
+    int available = Runtime.getRuntime().availableProcessors();
+    if (numThreads == available) {
+      // Reuse the common pool when requested parallelism matches machine capacity.
+      this.pool = ForkJoinPool.commonPool();
+      this.ownsPool = false;
+    } else {
+      // Otherwise keep one dedicated pool and reuse it across method calls.
+      this.pool = new ForkJoinPool(numThreads);
+      this.ownsPool = true;
+    }
+  }
+
+  /**
+   * Shuts down the dedicated pool when this aligner owns one.
+   *
+   * <p>No-op when running sequentially or when using the common pool.
+   */
+  public void shutdown() {
+    if (ownsPool) {
+      pool.shutdown();
+    }
+  }
+
+  /**
+   * Alias for {@link #shutdown()} to support try-with-resources usage.
+   */
+  @Override
+  public void close() {
+    shutdown();
   }
 
   @Override
@@ -62,53 +97,38 @@ public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost
       return dp[n][m];
     }
 
-    ForkJoinPool pool = (numThreads > 1) ? new ForkJoinPool(numThreads) : null;
-    try {
-      // Process anti-diagonals in order: each diagonal depends only on earlier diagonals.
-      for (int d = 2; d <= n + m; d++) {
-        int iMin = Math.max(1, d - m);
-        int iMax = Math.min(n, d - 1);
-        if (iMin > iMax) {
-          continue;
-        }
-
-        int cellCount = iMax - iMin + 1;
-        // Small diagonals are cheaper to evaluate sequentially than to schedule in parallel.
-        if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
-          for (int i = iMin; i <= iMax; i++) {
-            int j = d - i;
-            int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-            int up = dp[i - 1][j] + gap.cost(1);
-            int left = dp[i][j - 1] + gap.cost(1);
-            dp[i][j] = Math.min(diag, Math.min(up, left));
-          }
-        } else {
-          int chunkSize = Math.max(1, (cellCount + numThreads - 1) / numThreads);
-          final int diag = d;
-          List<ForkJoinTask<?>> tasks = new ArrayList<>();
-          // Parallelize independent cells on this anti-diagonal using chunked tasks.
-          for (int start = iMin; start <= iMax; start += chunkSize) {
-            final int chunkStart = start;
-            final int chunkEnd = Math.min(iMax, start + chunkSize - 1);
-            tasks.add(pool.submit(() -> {
-              for (int i = chunkStart; i <= chunkEnd; i++) {
-                int j = diag - i;
-                int diagCost = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-                int up = dp[i - 1][j] + gap.cost(1);
-                int left = dp[i][j - 1] + gap.cost(1);
-                dp[i][j] = Math.min(diagCost, Math.min(up, left));
-              }
-            }));
-          }
-          for (ForkJoinTask<?> task : tasks) {
-            task.join();
-          }
-        }
+    // Process anti-diagonals in order: each diagonal depends only on earlier diagonals.
+    for (int d = 2; d <= n + m; d++) {
+      int iMin = Math.max(1, d - m);
+      int iMax = Math.min(n, d - 1);
+      if (iMin > iMax) {
+        continue;
       }
-    } finally {
-      // Always release worker threads after the DP completes.
-      if (pool != null) {
-        pool.shutdown();
+
+      int cellCount = iMax - iMin + 1;
+      // Small diagonals are cheaper to evaluate sequentially than to schedule in parallel.
+      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+        for (int i = iMin; i <= iMax; i++) {
+          int j = d - i;
+          int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+          int up = dp[i - 1][j] + gap.cost(1);
+          int left = dp[i][j - 1] + gap.cost(1);
+          dp[i][j] = Math.min(diag, Math.min(up, left));
+        }
+      } else {
+        final int diagonal = d;
+        final int start = iMin;
+        final int end = iMax;
+        // A single submitted task drives parallel per-cell work on this anti-diagonal.
+        pool.submit(() ->
+            IntStream.rangeClosed(start, end).parallel().forEach(i -> {
+              int j = diagonal - i;
+              int diagCost = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+              int up = dp[i - 1][j] + gap.cost(1);
+              int left = dp[i][j - 1] + gap.cost(1);
+              dp[i][j] = Math.min(diagCost, Math.min(up, left));
+            })
+        ).join();
       }
     }
 
@@ -135,75 +155,61 @@ public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost
       back[0][j] = Move.LEFT;
     }
 
-    ForkJoinPool pool = (numThreads > 1) ? new ForkJoinPool(numThreads) : null;
-    try {
-      // As in computeCost, anti-diagonals are processed in dependency order.
-      for (int d = 2; d <= n + m; d++) {
-        int iMin = Math.max(1, d - m);
-        int iMax = Math.min(n, d - 1);
-        if (iMin > iMax) {
-          continue;
-        }
-
-        int cellCount = iMax - iMin + 1;
-        if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
-          for (int i = iMin; i <= iMax; i++) {
-            int j = d - i;
-            int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-            int up = dp[i - 1][j] + gap.cost(1);
-            int left = dp[i][j - 1] + gap.cost(1);
-
-            int best = diag;
-            Move bestMove = Move.DIAG;
-            if (up < best) {
-              best = up;
-              bestMove = Move.UP;
-            }
-            if (left < best) {
-              best = left;
-              bestMove = Move.LEFT;
-            }
-            dp[i][j] = best;
-            back[i][j] = bestMove;
-          }
-        } else {
-          int chunkSize = Math.max(1, (cellCount + numThreads - 1) / numThreads);
-          final int diag = d;
-          List<ForkJoinTask<?>> tasks = new ArrayList<>();
-          // Each cell writes to a unique (i,j), so chunked tasks are race-free.
-          for (int start = iMin; start <= iMax; start += chunkSize) {
-            final int chunkStart = start;
-            final int chunkEnd = Math.min(iMax, start + chunkSize - 1);
-            tasks.add(pool.submit(() -> {
-              for (int i = chunkStart; i <= chunkEnd; i++) {
-                int j = diag - i;
-                int diagCost = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
-                int up = dp[i - 1][j] + gap.cost(1);
-                int left = dp[i][j - 1] + gap.cost(1);
-
-                int best = diagCost;
-                Move bestMove = Move.DIAG;
-                if (up < best) {
-                  best = up;
-                  bestMove = Move.UP;
-                }
-                if (left < best) {
-                  best = left;
-                  bestMove = Move.LEFT;
-                }
-                dp[i][j] = best;
-                back[i][j] = bestMove;
-              }
-            }));
-          }
-          for (ForkJoinTask<?> task : tasks) {
-            task.join();
-          }
-        }
+    // As in computeCost, anti-diagonals are processed in dependency order.
+    for (int d = 2; d <= n + m; d++) {
+      int iMin = Math.max(1, d - m);
+      int iMax = Math.min(n, d - 1);
+      if (iMin > iMax) {
+        continue;
       }
-    } finally {
-      if (pool != null) {
-        pool.shutdown();
+
+      int cellCount = iMax - iMin + 1;
+      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+        for (int i = iMin; i <= iMax; i++) {
+          int j = d - i;
+          int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+          int up = dp[i - 1][j] + gap.cost(1);
+          int left = dp[i][j - 1] + gap.cost(1);
+
+          int best = diag;
+          Move bestMove = Move.DIAG;
+          if (up < best) {
+            best = up;
+            bestMove = Move.UP;
+          }
+          if (left < best) {
+            best = left;
+            bestMove = Move.LEFT;
+          }
+          dp[i][j] = best;
+          back[i][j] = bestMove;
+        }
+      } else {
+        final int diagonal = d;
+        final int start = iMin;
+        final int end = iMax;
+        // A single submitted task drives parallel per-cell work on this anti-diagonal.
+        pool.submit(() ->
+            IntStream.rangeClosed(start, end).parallel().forEach(i -> {
+              int j = diagonal - i;
+              int diagCost = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
+              int up = dp[i - 1][j] + gap.cost(1);
+              int left = dp[i][j - 1] + gap.cost(1);
+
+              int best = diagCost;
+              Move bestMove = Move.DIAG;
+              if (up < best) {
+                best = up;
+                bestMove = Move.UP;
+              }
+              if (left < best) {
+                best = left;
+                bestMove = Move.LEFT;
+              }
+              dp[i][j] = best;
+              back[i][j] = bestMove;
+            })
+        ).join();
       }
     }
 
