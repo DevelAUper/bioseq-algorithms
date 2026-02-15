@@ -10,7 +10,7 @@ import java.util.Objects;
 /**
  * Global alignment with linear gap penalties (min-cost).
  */
-public final class GlobalLinearAligner implements GlobalAligner {
+public final class GlobalLinearAligner implements GlobalAligner<LinearGapCost> {
   @Override
   public int computeCost(Sequence s1, Sequence s2, ScoreMatrix m, LinearGapCost gap) {
     validateInputs(s1, s2, m, gap);
