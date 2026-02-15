@@ -35,8 +35,8 @@ class EvalVerificationTest {
    */
   @Test
   void verifyCostTable() throws IOException {
-    Path fastaPath = Paths.get("..", "data", "fasta", "project1_eval_seqs.fa");
-    Path matrixPath = Paths.get("..", "data", "matrices", "project1_M.txt");
+    Path fastaPath = Paths.get("..", "..", "data", "fasta", "project1_eval_seqs.fa");
+    Path matrixPath = Paths.get("..", "..", "data", "matrices", "project1_M.txt");
 
     Assumptions.assumeTrue(Files.exists(fastaPath), "Missing FASTA: " + fastaPath);
     Assumptions.assumeTrue(Files.exists(matrixPath), "Missing matrix: " + matrixPath);
@@ -65,8 +65,8 @@ class EvalVerificationTest {
    */
   @Test
   void verifyCountTable() throws IOException {
-    Path fastaPath = Paths.get("..", "data", "fasta", "project1_eval_seqs.fa");
-    Path matrixPath = Paths.get("..", "data", "matrices", "project1_M.txt");
+    Path fastaPath = Paths.get("..", "..", "data", "fasta", "project1_eval_seqs.fa");
+    Path matrixPath = Paths.get("..", "..", "data", "matrices", "project1_M.txt");
 
     Assumptions.assumeTrue(Files.exists(fastaPath), "Missing FASTA: " + fastaPath);
     Assumptions.assumeTrue(Files.exists(matrixPath), "Missing matrix: " + matrixPath);

@@ -17,9 +17,15 @@ package bioseq.cli;
  * </ul>
  */
 public final class GlobalCountApp {
+  /** Utility launcher class; not instantiable. */
   private GlobalCountApp() {
   }
 
+  /**
+   * Compatibility entry point that forwards arguments to {@code bioseq-cli global_count}.
+   *
+   * @param args raw command-line arguments for the legacy command
+   */
   public static void main(String[] args) {
     String[] forwarded = new String[args.length + 1];
     forwarded[0] = "global_count";

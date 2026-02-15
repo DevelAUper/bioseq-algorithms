@@ -8,6 +8,8 @@ package bioseq.core.gap;
  *
  * <p>This model penalizes opening a new gap more heavily than extending
  * an existing one, which is biologically more realistic than linear gap cost.
+ * It implements the shared {@link GapCost} contract so aligners can be written
+ * against a common gap-model abstraction.
  */
 public final class AffineGapCost implements GapCost {
   private final int alpha;
@@ -31,6 +33,13 @@ public final class AffineGapCost implements GapCost {
     this.beta = beta;
   }
 
+  /**
+   * Computes the affine penalty for a gap of length {@code length}.
+   *
+   * @param length contiguous gap length
+   * @return {@code 0} when {@code length == 0}; otherwise {@code alpha + beta * length}
+   * @throws IllegalArgumentException if {@code length} is negative
+   */
   @Override
   public int cost(int length) {
     if (length < 0) {

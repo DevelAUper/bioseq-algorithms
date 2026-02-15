@@ -16,9 +16,15 @@ package bioseq.cli;
  * </ul>
  */
 public final class GlobalLinearApp {
+  /** Utility launcher class; not instantiable. */
   private GlobalLinearApp() {
   }
 
+  /**
+   * Compatibility entry point that forwards arguments to {@code bioseq-cli global_linear}.
+   *
+   * @param args raw command-line arguments for the legacy command
+   */
   public static void main(String[] args) {
     String[] forwarded = new String[args.length + 1];
     forwarded[0] = "global_linear";
