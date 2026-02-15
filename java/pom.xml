@@ -13,6 +13,7 @@
     <module>pairwise-alignment</module>
     <module>multiple-alignment</module>
     <module>phylogeny</module>
+    <module>gui</module>
     <module>cli</module>
   </modules>
 
