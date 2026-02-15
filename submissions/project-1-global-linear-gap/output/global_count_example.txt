@@ -1,2 +1,0 @@
-cost: 6
-count: 3

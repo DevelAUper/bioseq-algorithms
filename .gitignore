@@ -21,3 +21,6 @@ Thumbs.db
 *.jar
 *.war
 *.ear
+
+# Private hand-in bundles
+submissions/

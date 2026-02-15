@@ -1,30 +1,67 @@
 # Getting Started
 
-This page explains how to build and run the Java modules, with emphasis on reproducibility and minimal prerequisites. It will also describe where to find submission bundles and how they relate to the code.
+This page shows how to build, test, and run the current BioSeq toolkit from a clean checkout.
 
-## Outline
-- Prerequisites (Java, Maven)
-- Build and test
-- Running the CLI
-- Where results and submissions live
+## Prerequisites
+- Java 21 or newer
+- Maven 3.9+ or the included Maven Wrapper (`mvnw` / `mvnw.cmd`)
 
-## Maven Wrapper
-If Maven is not installed locally, you can generate the Maven Wrapper from the `java/` folder:
+## Build
+Unix/macOS:
 ```bash
 cd java
-mvn -N wrapper:wrapper
-```
-This creates `mvnw`, `mvnw.cmd`, and the `.mvn/wrapper/` files needed to run:
-```bash
-cd java
-.\mvnw.cmd -q test
+./mvnw -q package -DskipTests
 ```
 
-## Running the tools
-Java 21 is required for this project. Use the Maven Wrapper in `java/` to build:
+Windows PowerShell:
 ```powershell
 cd java
-.\mvnw.cmd -q test
-.\mvnw.cmd -q package
+.\mvnw.cmd -q package -DskipTests
 ```
-Runnable jars will be produced later in the `cli` module. For the current CLI contract and options, see `docs/cli.md`.
+
+## Run Tests
+Unix/macOS:
+```bash
+cd java
+./mvnw test
+```
+
+Windows PowerShell:
+```powershell
+cd java
+.\mvnw.cmd test
+```
+
+## Run the CLI
+Show help:
+```bash
+java -jar java/cli/target/bioseq-cli.jar --help
+```
+
+Linear global alignment:
+```bash
+java -jar java/cli/target/bioseq-cli.jar global_linear --seq1 ACGT --seq2 AGT --matrix data/matrices/dna_example.txt --gap 2
+```
+
+Affine global alignment:
+```bash
+java -jar java/cli/target/bioseq-cli.jar global_affine --seq1 ACGT --seq2 AGT --matrix data/matrices/dna_example.txt --alpha 10 --beta 3
+```
+
+## Run the GUI
+```bash
+java -jar java/gui/target/bioseq-gui.jar
+```
+
+## Module Overview
+- `java/core`: shared data structures, FASTA I/O, alphabet/matrix parsing, gap models.
+- `java/pairwise-alignment`: global linear/affine aligners, counting, and wavefront parallel variants.
+- `java/multiple-alignment`: center-star heuristic, profile matrix, sum-of-pairs scoring.
+- `java/phylogeny`: distance matrix utilities and tree builders (UPGMA, Neighbor-Joining).
+- `java/cli`: picocli command-line tools.
+- `java/gui`: Swing desktop application.
+
+## Next Reading
+- CLI details: `docs/cli.md`
+- Input formats: `docs/fasta-and-io.md`, `docs/scoring-matrices.md`
+- Algorithms: `docs/pairwise-global-linear.md`, `docs/counting-optimal-alignments.md`
