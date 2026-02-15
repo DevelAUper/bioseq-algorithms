@@ -107,7 +107,7 @@ public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost
 
       int cellCount = iMax - iMin + 1;
       // Small diagonals are cheaper to evaluate sequentially than to schedule in parallel.
-      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+      if (numThreads <= 1 || cellCount <= PARALLEL_CELL_THRESHOLD) {
         for (int i = iMin; i <= iMax; i++) {
           int j = d - i;
           int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
@@ -164,7 +164,7 @@ public final class WavefrontLinearAligner implements GlobalAligner<LinearGapCost
       }
 
       int cellCount = iMax - iMin + 1;
-      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+      if (numThreads <= 1 || cellCount <= PARALLEL_CELL_THRESHOLD) {
         for (int i = iMin; i <= iMax; i++) {
           int j = d - i;
           int diag = dp[i - 1][j - 1] + matrix.cost(a.charAt(i - 1), b.charAt(j - 1));

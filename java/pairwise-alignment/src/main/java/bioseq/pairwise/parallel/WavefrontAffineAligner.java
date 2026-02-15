@@ -123,7 +123,7 @@ public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost
 
       int cellCount = iMax - iMin + 1;
       // Parallel execution is only worthwhile on sufficiently large anti-diagonals.
-      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+      if (numThreads <= 1 || cellCount <= PARALLEL_CELL_THRESHOLD) {
         for (int i = iMin; i <= iMax; i++) {
           int j = diagonal - i;
           int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
@@ -213,7 +213,7 @@ public final class WavefrontAffineAligner implements GlobalAligner<AffineGapCost
       }
 
       int cellCount = iMax - iMin + 1;
-      if (pool == null || cellCount <= PARALLEL_CELL_THRESHOLD) {
+      if (numThreads <= 1 || cellCount <= PARALLEL_CELL_THRESHOLD) {
         for (int i = iMin; i <= iMax; i++) {
           int j = diagonal - i;
           int substitution = matrix.cost(a.charAt(i - 1), b.charAt(j - 1));
